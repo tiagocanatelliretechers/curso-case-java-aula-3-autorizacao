@@ -1,28 +1,33 @@
-# Aula 03 — Autorização & Senhas — Laboratório
-IDOR, autorização por objeto, RBAC, MD5→BCrypt e rate limiting. Parte do **Curso CASE Java (Certified Application Security Engineer)**.
+# Aula 02 — SQLi · Validação · Upload  ·  (SEM)
+Branch de apoio no repositório da Aula 3, para **explicar a Aula 2**: a mesma aplicação SEM os tratamentos de segurança.
 
-> ⚠️ Aplicação **propositalmente vulnerável**, para fins didáticos. Não use em produção.
+> ⚠️ App didático. Esta branch é **SEM tratamentos** — ver abaixo.
 
-## Como rodar (sem Docker, banco H2 em memória)
+## O que a Aula 2 trata (tratamentos)
+- **SQL Injection** em `/produtos/buscar` → `ProdutoService` (query parametrizada).
+- **Validação de entrada** (CNPJ) → `dto/CNPJ.java`, `CnpjValidator`, `CadastroClienteForm`.
+- **Upload inseguro** → `UploadService` (tipo/tamanho/isolamento).
+
+Nesta branch a aplicação está **vulnerável**: SQLi na busca, sem validação de CNPJ e upload inseguro. Use para demonstrar o problema.
+
+## Rodar
 ```bash
-git clone https://github.com/tiagocanatelliretechers/curso-case-java-aula-3-autorizacao.git
-cd curso-case-java-aula-3-autorizacao
 ./scripts/start.sh --no-docker        # Windows: .\scripts\start.ps1 -NoDocker
 ```
-Acesse <http://localhost:8080> — contas: `admin@portal.com/admin123`, `joao@acme.com/senha123`.
+Acesse <http://localhost:8080>. Contas: `admin@portal.com/admin123`, `joao@acme.com/senha123`.
 
-## Branches
-- **main** — *baseline*: código vulnerável, ponto de partida do laboratório.
-- **hardened** — solução de referência: `git checkout hardened` para comparar.
+## Demonstrar o SQL Injection (com o app no ar)
+```bash
+curl -s -G "http://localhost:8080/produtos/buscar" \
+  --data-urlencode "termo=zzz' UNION SELECT id,email,senha,0,0 FROM usuario --"
+```
+- **sem tratamentos:** vazam e-mails/hashes no lugar dos produtos.
+- **com tratamentos:** a query é parametrizada — nada vaza.
 
-## Materiais (`materiais/`)
-- **lab.md** — guia do aluno (autoguiado: o que observar, o que significa, ponto de entendimento, troubleshooting).
-- **roteiro-demonstracao.md** — pré-lab pronto para o **instrutor demonstrar** (exploit → hardened → provar → mostrar código).
-- **lab-aula-3.pptx** — deck do laboratório.
-- **conteudo-…pptx** — slides de conteúdo (teoria).
-- **GUIA-DO-INSTRUTOR.md** — a dinâmica de aula e o roteiro.
+## Branches deste repositório
+- `main` — Aula 3 baseline (== Aula 2 **com** tratamentos).
+- `hardened` — Aula 3 solução.
+- `aula-2-sem-tratamentos` — Aula 2 **sem** os tratamentos (vulnerável).
+- `aula-2-com-tratamentos` — Aula 2 **com** os tratamentos (corrigido).
 
-## Fluxo do laboratório
-1. Leia `materiais/lab.md`.
-2. Rode e explore a falha (branch **main**).
-3. Corrija seguindo o lab — ou compare com a branch **hardened**.
+Materiais da Aula 2 em `materiais/` (lab, slides, conteúdo).

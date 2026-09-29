@@ -4,10 +4,8 @@ import com.thrive.portal.domain.Cliente;
 import com.thrive.portal.dto.CadastroClienteForm;
 import com.thrive.portal.repository.ClienteRepository;
 import com.thrive.portal.service.UsuarioService;
-import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,12 +39,8 @@ public class HomeController {
     }
 
     @PostMapping("/registrar")
-    public String registrar(@Valid @ModelAttribute("form") CadastroClienteForm form,
-                            BindingResult br, Model model) {
-        // Lab 2.3 - valida na borda; reexibe com mensagens genericas.
-        if (br.hasErrors()) {
-            return "registrar";
-        }
+    public String registrar(@ModelAttribute("form") CadastroClienteForm form, Model model) {
+        // Baseline: sem validacao de entrada (Lab 2.3 adiciona Bean Validation).
         Cliente cliente = new Cliente();
         cliente.setRazaoSocial(form.getRazaoSocial());
         cliente.setCnpj(form.getCnpj());
@@ -65,7 +59,7 @@ public class HomeController {
 
     @PostMapping("/esqueci-senha")
     public String esqueciSenha(@RequestParam String email, Model model) {
-        // A07 - user enumeration (sera corrigido na Aula 3)
+        // A07 - user enumeration (mensagem diferente para e-mail existente/inexistente)
         model.addAttribute("mensagem", usuarioService.recuperarSenha(email));
         return "esqueci-senha";
     }

@@ -1,92 +1,103 @@
-# Aula 3 — Slides (outline)
-## Secure Coding para Autenticação e Autorização
+# Aula 2 — Slides (outline)
+## Secure Application Design & Architecture + Secure Coding para Input Validation
 
-> 240 min (2 intervalos de 10 min). Módulo único, mais denso — laboratório estendido (80 min).
-> Abertura: "Vimos o IDOR no reconhecimento. Hoje vamos explorá-lo de verdade e corrigi-lo."
-
----
-
-### BLOCO 1 (50 min) — Autenticação segura
-
-**Slide 1 — Abertura e objetivos**
-- Autenticação (provar quem é) vs. Autorização (o que pode fazer).
-- Hoje: hashing de senha, políticas, MFA, SSO, RBAC/ABAC, IDOR, Spring Security.
-- **Nota:** Reforce a distinção authn × authz desde já — é a confusão nº 1.
-
-**Slide 2 — Armazenamento de senha: o que NÃO fazer**
-- Texto claro: inaceitável.
-- MD5/SHA-1 puro: rápido demais → brute force/rainbow tables triviais.
-- Cripto reversível: se dá para descriptografar, o atacante também consegue.
-- **Nota:** No Portal, senha é MD5 sem salt — mostre a quebra offline (Aula 1 extraiu o hash via SQLi).
-
-**Slide 3 — Hashing de senha adequado**
-- Algoritmos: **bcrypt**, **Argon2**, **PBKDF2** (funções lentas, com custo ajustável).
-- **Salt** único por senha (embutido no bcrypt) + **work factor** (custo) calibrado.
-- Nunca implemente cripto própria.
-- **Nota:** bcrypt inclui salt no próprio hash (`$2a$10$...`). Work factor ≥ 10; recalibrar com hardware.
-
-**Slide 4 — Política de senha moderna (NIST 800-63B)**
-- Comprimento > complexidade forçada; permitir frases longas.
-- Verificar contra listas de senhas vazadas.
-- **Rate limiting** em vez de expiração/rotação forçada e bloqueio permanente.
-- Não exigir regras que levem a padrões previsíveis.
-- **Nota:** Desmistifique "trocar senha a cada 30 dias" — NIST recomenda o contrário.
-
-**Slide 5 — MFA e step-up authentication**
-- MFA (algo que sabe + tem + é): TOTP, WebAuthn/passkeys, push.
-- Step-up: exigir 2º fator só em operações sensíveis (checkout, mudança de dados).
-- **Nota:** MFA é a defesa mais eficaz contra account takeover por senha vazada.
-
-**Slide 6 — Gestão de credenciais e segredos**
-- Nunca hardcode senha/chave/token no código ou repositório.
-- Usar secrets manager / variáveis de ambiente / vault.
-- Rotação e escopo mínimo.
-- **Nota:** No Portal, `portal.jwt.secret` está no `application.yml` e vaza no `/actuator/env` — ligue com Aula 4.
-
-**Slide 7 — Fluxo "esqueci minha senha" seguro**
-- Token de uso único, aleatório (CSPRNG), com expiração curta.
-- Resposta **genérica** (não revelar se o e-mail existe) → anti user enumeration.
-- Invalidar sessões após redefinição.
-- **Nota:** No Portal a mensagem revela se o e-mail existe (A07). Discuta a correção.
-
-**Slide 8 — SSO: SAML e OIDC/OAuth2**
-- SAML: XML, corporativo/legado. OIDC (sobre OAuth2): moderno, JSON/JWT.
-- OAuth2 = autorização/delegação; OIDC adiciona autenticação (id_token).
-- Riscos comuns: não validar assinatura, `audience`/`issuer`, `nonce`, redirect_uri.
-- **Nota:** Regra de ouro: valide SEMPRE assinatura, issuer e audience do token.
+> 240 min (2 intervalos de 10 min). Termos técnicos em inglês mantidos.
+> Abertura: "Na Aula 1 vocês reconheceram a aplicação e escreveram requisitos. Hoje
+> entendemos por que essas falhas nascem (design) e como a validação de entrada as elimina."
 
 ---
 
-### BLOCO 2 (40 min) — Autorização e controle de acesso
+### BLOCO 1 (60 min) — Secure Design & Architecture
 
-**Slide 9 — Modelos de autorização**
-- **RBAC** (por papel), **ABAC** (por atributos/contexto), **ReBAC** (por relacionamento — "é dono de").
-- Quando usar: RBAC simples/estável; ABAC contexto rico; ReBAC posse/compartilhamento.
-- **Nota:** O Portal precisa de RBAC (admin/user) + ReBAC (cliente é dono do pedido).
+**Slide 1 — Abertura e ponte com a Aula 1**
+- Retomar 2–3 requisitos de segurança que a turma derivou.
+- Hoje: princípios de design seguro, threat modeling (STRIDE) e input validation.
+- **Nota:** Conecte cada princípio a uma falha já observada no Portal.
 
-**Slide 10 — Broken Access Control na prática**
-- **IDOR**: referência direta a objeto sem checar posse.
-- Escalada **vertical** (user→admin) vs **horizontal** (user→outro user).
-- **Forced browsing**: acessar URLs não linkadas.
-- **Nota:** No Portal temos os três: `/pedidos/{id}` (horizontal), `/admin` (vertical), forced browsing de endpoints.
+**Slide 2 — Objetivos**
+- Aplicar princípios de Secure by Design.
+- Fazer threat modeling com STRIDE sobre a arquitetura do Portal.
+- Dominar validação de entrada (Bean Validation, allowlist, upload seguro).
+- Corrigir SQL Injection e falhas de validação no laboratório.
 
-**Slide 11 — Autorização em todas as camadas**
-- Esconder botão no frontend **não** é controle.
-- Verificar no servidor, no ponto de acesso ao recurso.
-- **Complete mediation**: cada acesso é verificado.
-- **Nota:** Demonstre: remover o link de `/admin` não impede o acesso direto.
+**Slide 3 — Princípios de Secure by Design (1/2)**
+- **Least privilege:** cada componente/usuário com o mínimo necessário.
+- **Defense in depth:** múltiplas camadas; nenhuma é o único ponto de falha.
+- **Fail securely:** em erro, negar por padrão (não abrir acesso).
+- **Separation of duties:** separar papéis críticos.
+- **Nota:** Exemplo fail-secure: exceção no filtro de autorização deve resultar em 403, não em "passa".
 
-**Slide 12 — Object-level authorization (anti-IDOR)**
-- Além de "está autenticado?" e "tem o papel?", perguntar: "este objeto é dele?".
-- Essencial em APIs REST (a causa nº 1 de vazamento em APIs).
-- Implementar no Service (dono do recurso) e/ou `@PostAuthorize`.
-- **Nota:** Este é o coração do Lab 3.2.
+**Slide 4 — Princípios de Secure by Design (2/2)**
+- **Economy of mechanism (KISS):** simplicidade reduz superfície de erro.
+- **Complete mediation:** toda requisição a um recurso é verificada (não cachear decisão de acesso indevidamente).
+- **Zero Trust:** nunca confiar por localização de rede; verificar sempre identidade e autorização.
+- **Nota:** Zero Trust é a evolução moderna desses princípios; ligue com autorização por objeto (Aula 3).
 
-**Slide 13 — Erros comuns de autorização**
-- Confiar em campo do cliente (role no JWT sem verificar assinatura).
-- Checar autorização só em algumas rotas.
-- Cachear decisão de acesso indevidamente.
-- **Nota:** Ligue o "role no JWT" com a Aula 4 (JWT sem verificação).
+**Slide 5 — Arquitetura em camadas e responsabilidade de segurança**
+- Controller (borda): autenticação, validação sintática, mapeamento de erro.
+- Service (domínio): autorização de negócio, validação semântica, invariantes.
+- Repository: acesso a dados parametrizado.
+- **Nota:** No Portal, o IDOR existe porque a autorização de posse não está em nenhuma camada. Design decide onde ela mora.
+
+**Slide 6 — Onde validar: borda vs. domínio**
+- Client-side: só UX; nunca confiar.
+- Server-side na borda: formato/sintaxe (Bean Validation nos DTOs).
+- Domínio: regras de negócio e invariantes (ex.: "preço vem do servidor").
+- **Nota:** Reforce: validação client-side é conveniência, não controle.
+
+**Slide 7 — Gateway/WAF como camada adicional**
+- API Gateway/WAF ajudam (rate limiting, filtragem, TLS termination).
+- São **complemento**, não substituto do código seguro.
+- Atacante adapta payload para burlar assinaturas do WAF.
+- **Nota:** "WAF compra tempo; não corrige a vulnerabilidade."
+
+**Slide 8 — Threat Modeling: por que e quando**
+- Antecipar ameaças no design, antes de codar.
+- Perguntas: o que estamos construindo? o que pode dar errado? o que faremos? fizemos bem?
+- STRIDE é uma taxonomia para "o que pode dar errado".
+- **Nota:** Threat modeling é atividade de time; hoje faremos um exemplo guiado.
+
+**Slide 9 — Data Flow Diagram (DFD) do Portal (nível 1)**
+- Entidades externas: Cliente (browser), Admin, Fornecedor (URL de catálogo).
+- Processos: App web (Controllers/Services).
+- Data stores: Banco (usuário/cliente/pedido/produto), Storage de anexos.
+- Fluxos: login, busca, checkout, upload, importar catálogo, painel admin.
+- Trust boundaries: internet↔app, app↔banco, app↔storage, app↔fornecedor.
+- **Nota:** Peça aos alunos que desenhem junto; este DFD é a base do Lab 2.1.
+
+**Slide 10 — STRIDE (definição)**
+- **S**poofing (autenticidade) · **T**ampering (integridade) · **R**epudiation (auditoria)
+- **I**nformation Disclosure (confidencialidade) · **D**enial of Service (disponibilidade) · **E**levation of Privilege (autorização)
+- **Nota:** Cada letra mapeia para uma propriedade de segurança violada.
+
+**Slide 11 — STRIDE aplicado ao Portal (matriz — exemplos)**
+- Ver `anexos/matriz-stride.md` (preenchida com 8+ ameaças).
+- Exemplos:
+  - Login (Spoofing): brute force sem rate limiting → mitigar com throttling/MFA.
+  - Busca (Tampering/Info Disclosure): SQLi → query parametrizada.
+  - `/pedidos/{id}` (Elevation/Info Disclosure): IDOR → checar posse.
+  - Import catálogo (Info Disclosure): SSRF → allowlist de destino.
+  - Upload (Tampering/DoS): arquivo malicioso/gigante → validar tipo/tamanho.
+- **Nota:** Mostre 3–4 linhas ao vivo; o resto os alunos completam no Lab 2.1.
+
+**Slide 12 — Do modelo à mitigação**
+- Cada ameaça → um requisito/controle → um teste.
+- Priorize por risco (prob × impacto).
+- **Nota:** Ligue com priorização vista na Aula 1.
+
+---
+
+### BLOCO 2 (40 min) — Threat Modeling prático (STRIDE)
+
+**Slide 13 — Exercício guiado (com a turma)**
+- Preencher juntos 4 linhas da matriz STRIDE para: login, busca, upload, import.
+- **Nota:** Este bloco é hands-on de modelagem; a matriz continua no Lab 2.1.
+
+**Slide 14 — Erros comuns em threat modeling**
+- Focar só em "hackers externos" e esquecer insiders/erros.
+- Parar no diagrama e não derivar mitigações/testes.
+- Não revisar quando a arquitetura muda.
+- **Nota:** Transição para input validation após o intervalo.
 
 ---
 
@@ -94,44 +105,76 @@
 
 ---
 
-### BLOCO 3 (30 min) — Spring Security aplicado
+### BLOCO 3 (40 min) — Input Validation
 
-**Slide 14 — Arquitetura do Spring Security**
-- Cadeia de filtros (`SecurityFilterChain`); `Authentication`/`SecurityContext`.
-- `UserDetailsService` (carrega usuário) + `PasswordEncoder` (verifica senha).
-- **Nota:** Mostre o fluxo de uma requisição autenticada passando pelos filtros.
+**Slide 15 — Fundamentos de validação**
+- **Allowlist** (aceitar o conhecido-bom) > denylist (bloquear o conhecido-ruim).
+- Camadas de validação: **sintática** (formato) → **semântica** (faz sentido) → **de negócio** (regra do domínio).
+- **Nota:** Denylist sempre fica para trás do atacante; allowlist é o default seguro.
 
-**Slide 15 — Configuração segura (form login + method security)**
-- `authorizeHttpRequests` com regras explícitas; `hasRole`/`hasAuthority`.
-- Habilitar method security: `@EnableMethodSecurity`.
-- `@PreAuthorize`/`@PostAuthorize` com SpEL.
+**Slide 16 — Onde validar (recapitulando com código)**
+- Client-side = UX. Server-side = obrigatório.
+- Na borda: Bean Validation nos DTOs. No domínio: invariantes no Service.
+- **Nota:** Mostre um DTO com e sem anotações.
+
+**Slide 17 — Bean Validation (Jakarta) no Spring**
+- Anotações: `@NotNull`, `@NotBlank`, `@Size`, `@Pattern`, `@Email`, `@Positive`.
+- Ativar com `@Valid` no controller; erros via `BindingResult`/`@ControllerAdvice`.
   ```java
-  @PreAuthorize("hasRole('ADMIN')")
-  @PostAuthorize("returnObject.clienteId == principal.clienteId")
+  public class CadastroClienteForm {
+    @NotBlank @Size(max=150) private String razaoSocial;
+    @Email @NotBlank private String email;
+    @Size(min=8, max=100) private String senha;
+    @CNPJ private String cnpj; // validador customizado
+  }
   ```
-- **Nota:** No baseline, `/admin` está como `authenticated()` — deveria ser `hasRole('ADMIN')`.
+- **Nota:** No baseline os DTOs não têm nenhuma anotação — Lab 2.3 adiciona.
 
-**Slide 16 — PasswordEncoder e migração**
-- `BCryptPasswordEncoder` (ou `DelegatingPasswordEncoder` para múltiplos formatos).
-- Migração de MD5 → bcrypt: reidratar no próximo login bem-sucedido.
-- **Nota:** Estratégia de migração é o Lab 3.3.
+**Slide 18 — Validador customizado (`@Constraint`)**
+- Regra de negócio própria (ex.: CNPJ válido) como anotação reutilizável.
+- Componentes: anotação `@CNPJ` + `ConstraintValidator<CNPJ,String>`.
+- **Nota:** Mostre a estrutura; o código completo está no gabarito do Lab 2.3.
 
-**Slide 17 — Checagem de posse de recurso**
-- No Service: `if(!pedido.getClienteId().equals(clienteAtual)) throw AccessDenied`.
-- Ou `@PostAuthorize` avaliando o objeto retornado.
-- **Nota:** Prefira negar cedo no Service; `@PostAuthorize` complementa.
+**Slide 19 — Canonicalização e normalização**
+- Normalizar antes de validar (encoding, Unicode, path).
+- Path traversal: `../`, `%2e%2e`, variações de encoding.
+- **Nota:** "Valide o dado na forma canônica; senão o atacante escolhe a forma."
+
+**Slide 20 — Validação de upload de arquivo**
+- Validar: **magic number** (conteúdo real) + extensão (allowlist) + content-type + tamanho.
+- Nome de arquivo gerado pelo servidor (UUID); armazenar fora do webroot; sem execução.
+- Antivírus/scanning quando aplicável.
+- **Nota:** No Portal o upload aceita qualquer coisa — Lab 2.4 corrige.
+
+**Slide 21 — Injection na origem**
+- SQL: **queries parametrizadas** (PreparedStatement / JPA binding), nunca concatenar.
+- OS Command: evitar `Runtime.exec` com input; usar APIs seguras / allowlist de comandos.
+- LDAP/XPath: escaping/binding específico.
+- **Nota:** Validação reduz risco, mas a defesa primária contra SQLi é parametrização.
+
+**Slide 22 — SQL Injection: antes e depois (Java)**
+- Antes (vulnerável):
+  ```java
+  "SELECT ... WHERE nome LIKE '%" + termo + "%'"
+  ```
+- Depois (seguro):
+  ```java
+  jdbc.query("SELECT ... WHERE nome LIKE ?", ps -> ps.setString(1, "%"+termo+"%"), mapper);
+  // ou, com JPA:
+  @Query("... WHERE p.nome LIKE %:termo%") List<Produto> buscar(@Param("termo") String t);
+  ```
+- **Nota:** O parâmetro é enviado separado da query; o dado nunca vira código SQL.
 
 ---
 
-### BLOCO 4 (80 min) — Laboratório
+### BLOCO 4 (70 min) — Laboratório
 
-**Slide 18 — Laboratório da Aula 3**
-- Lab 3.1: explorar o IDOR (evidência).
-- Lab 3.2: corrigir IDOR (Service + @PostAuthorize) + teste.
-- Lab 3.3: migrar MD5 → BCrypt (com rehash no login).
-- Lab 3.4: rate limiting no login + política de senha.
-- Lab 3.5: `@PreAuthorize`/hasRole no `/admin` + teste 403.
-- **Nota:** Distribua `lab.md`. Priorize 3.1→3.2→3.3.
+**Slide 23 — Laboratório da Aula 2**
+- Lab 2.1: completar a matriz STRIDE (3 ameaças novas).
+- Lab 2.2: corrigir SQL Injection na busca de produtos.
+- Lab 2.3: Bean Validation nos DTOs + validador `@CNPJ`.
+- Lab 2.4: upload seguro (magic number, allowlist, tamanho, rename).
+- **Nota:** Distribua `lab.md`. Comece pelo 2.2 se o tempo apertar (maior valor).
 
 ---
 
@@ -141,12 +184,12 @@
 
 ### BLOCO 5 (20 min) — Debrief + Quiz
 
-**Slide 19 — Debrief**
-- Rodar o ataque IDOR contra a versão corrigida (deve dar 403).
-- Mostrar hash bcrypt no banco após rehash.
-- **Nota:** Conecte com métricas: quantas rotas ainda faltam proteger?
+**Slide 24 — Debrief**
+- Revisar a correção do SQLi: por que o payload `UNION` deixa de funcionar.
+- Mostrar o teste que prova a validação de upload.
+- **Nota:** Rode o payload de SQLi da Aula 1 contra a versão corrigida e mostre que falha.
 
-**Slide 20 — Quiz + ponte para a Aula 4**
+**Slide 25 — Quiz + ponte para a Aula 3**
 - Quiz (`quiz.md`).
-- Aula 4: criptografia e sessão — inclui o JWT sem verificação e os cookies inseguros.
-- **Nota:** Aula 4 parte de `aula-4-baseline` (IDOR/MD5/rate limiting já corrigidos).
+- Aula 3: autenticação e autorização — vamos explorar o IDOR e corrigir de verdade.
+- **Nota:** Aula 3 parte de `aula-3-baseline` (com o SQLi/validação já corrigidos).
